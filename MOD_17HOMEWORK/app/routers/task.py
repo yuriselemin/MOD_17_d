@@ -6,24 +6,19 @@ from app.models.task import Task
 from app.models.user import User
 from app.schemas import CreateTask, UpdateTask
 from sqlalchemy import insert, select, update, delete
-from slugify import slugify
 
 router = APIRouter(
     prefix="/task",
     tags=["task"])
 
-
-
 @router.get('/')
 async def all_task(db: Annotated[Session, Depends(get_db)]):
-    tasks = db.scalars(select(Task)).all()
+    tasks = db.query(Task).all()
     return tasks
-
-
 
 @router.get('/{task_id}')
 async def task_by_id(db: Annotated[Session, Depends(get_db)], task_id: int):
-    task = db.scalars(select(Task).where(Task.id == task_id)).all()
+    task = db.scalar_one_or_none(select(Task).where(Task.id == task_id))
     if task:
         return task
     else:
@@ -32,18 +27,14 @@ async def task_by_id(db: Annotated[Session, Depends(get_db)], task_id: int):
             detail='Task was not found'
         )
 
-
-
 @router.post('/create')
 async def create_task(db: Annotated[Session, Depends(get_db)], user_id: int, create_task: CreateTask):
-    existing_user = db.scalars(select(User).where(User.id == user_id)).first()
+    existing_user = db.scalar_one_or_none(select(User).where(User.id == user_id))
     if existing_user:
         db.execute(insert(Task).values(title=create_task.title,
                                        content=create_task.content,
                                        priority=create_task.priority,
-                                       user_id=user_id,
-                                       slug=create_task.title.lower()
-                                       ))
+                                       user_id=user_id))
         db.commit()
         return {
             'status_code': status.HTTP_201_CREATED,
@@ -55,13 +46,10 @@ async def create_task(db: Annotated[Session, Depends(get_db)], user_id: int, cre
             detail='User was not found'
         )
 
-
-
-
 @router.put('/update')
 async def update_task(db: Annotated[Session, Depends(get_db)], task_id: int, update_task: UpdateTask):
-    tasks = db.scalar(select(Task).where(Task.id == task_id))
-    if tasks:
+    task = db.scalar_one_or_none(select(Task).where(Task.id == task_id))
+    if task:
         db.execute(update(Task).where(Task.id == task_id).values(
             title=update_task.title,
             content=update_task.content,
@@ -77,13 +65,10 @@ async def update_task(db: Annotated[Session, Depends(get_db)], task_id: int, upd
             detail='Task was not found'
         )
 
-
-
-
 @router.delete('/delete')
 async def delete_task(db: Annotated[Session, Depends(get_db)], task_id: int):
-    tasks = db.scalar(select(Task).where(Task.id == task_id))
-    if tasks:
+    task = db.scalar_one_or_none(select(Task).where(Task.id == task_id))
+    if task:
         db.execute(delete(Task).where(Task.id == task_id))
         db.commit()
         return {
@@ -94,4 +79,16 @@ async def delete_task(db: Annotated[Session, Depends(get_db)], task_id: int):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='Task was not found'
+        )
+
+@router.get('/user/{user_id}/tasks')
+async def tasks_by_user_id(db: Annotated[Session, Depends(get_db)], user_id: int):
+    user = db.scalar_one_or_none(select(User).where(User.id == user_id))
+    if user:
+        tasks = db.query(Task).filter(Task.user_id == user_id).all()
+        return tasks
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='User was not found'
         )
